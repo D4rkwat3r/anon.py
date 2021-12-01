@@ -1,10 +1,14 @@
 import anonym
+import asyncio
 
 client = anonym.Client()
 
-client.auth("your login", "your password")
+async def main():
+  await client.auth("your login", "your password")
+  users = await client.getOnlineUsers()
+  for login in users.login:
+    await client.startChat(login, "Hey!")
 
-users = client.getOnlineUsers()
 
-for login in users.login:
-  client.startChat(login, "Hey!")
+if __name__ == "__main__":
+  asyncio.get_event_loop().run_until_complete(main())
