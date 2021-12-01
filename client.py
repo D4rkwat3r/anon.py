@@ -182,3 +182,107 @@ class Client:
             message = body["errorType"]
             raise exceptions.MessageSendingError(message)
         return response.status_code
+    
+    def like(self, postId: int):
+        if not self.token:
+            raise exceptions.Unauthorized()
+        data = {
+            "anonim": 0,
+            "comment_id": 0,
+            "count": 0,
+            "device": None,
+            "device_id": None,
+            "filter": None,
+            "gcm": None,
+            "hidden": 0,
+            "id": 0,
+            "last_message": 0,
+            "login": None,
+            "name": None,
+            "object_id": 0,
+            "offset": 0,
+            "owner_id": 0,
+            "password": None,
+            "post_id": postId,
+            "post_ids": None,
+            "search": None,
+            "text": None,
+            "type": 0,
+            "user_id": None
+        }
+        response = requests.post(f"{self.mainApi}/posts/likeAdd", headers = self.headers, json = data)
+        body = loads(response.text)
+        if body["error"]:
+            message = body["message"]
+            raise exceptions.LikeError(message)
+        return response.status_code
+    
+    def unlike(self, postId: int):
+        if not self.token:
+            raise exceptions.Unauthorized()
+        data = {
+            "anonim": 0,
+            "comment_id": 0,
+            "count": 0,
+            "device": None,
+            "device_id": None,
+            "filter": None,
+            "gcm": None,
+            "hidden": 0,
+            "id": 0,
+            "last_message": 0,
+            "login": None,
+            "name": None,
+            "object_id": 0,
+            "offset": 0,
+            "owner_id": 0,
+            "password": None,
+            "post_id": postId,
+            "post_ids": None,
+            "search": None,
+            "text": None,
+            "type": 0,
+            "user_id": None
+        }
+        response = requests.post(f"{self.mainApi}/posts/likeDelete", headers = self.headers, json = data)
+        body = loads(response.text)
+        if body["error"]:
+            message = body["message"]
+            raise exceptions.LikeError(message)
+        return response.status_code
+    
+    def comment(self, postId: int, comment: str):
+        if not self.token:
+            raise exceptions.Unauthorized()
+        if len(comment) < 3:
+            raise exceptions.InvalidCommentLenght()
+        data = {
+            "anonim": 0,
+            "comment_id": 0,
+            "count": 0,
+            "device": None,
+            "device_id": None,
+            "filter": None,
+            "gcm": None,
+            "hidden": 0,
+            "id": 0,
+            "last_message": 0,
+            "login": None,
+            "name": None,
+            "object_id": 0,
+            "offset": 0,
+            "owner_id": 0,
+            "password": None,
+            "post_id": postId,
+            "post_ids": None,
+            "search": None,
+            "text": comment,
+            "type": 0,
+            "user_id": None
+        }
+        response = requests.post(f"{self.mainApi}/posts/commentAdd", headers = self.headers, json = data)
+        body = loads(response.text)
+        if body["error"]:
+            message = body["message"]
+            raise exceptions.CommentingError(message)
+        return response.status_code
