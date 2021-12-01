@@ -1,5 +1,6 @@
 from ujson import loads
-import requests
+import asyncio
+import aiohttp
 from uuid import uuid1
 from .util import headers, exceptions, helping, objects
 
@@ -9,19 +10,25 @@ class Client:
         self.chatApi = "https://chat.apianon.ru/api/v1"
         self.mediaRepository = "http://fotoanon.ru"
         self.token = None
+        self.clientSession = aiohttp.ClientSession()
         self.headers = headers.Headers().headers
         self.chatHeaders = headers.Headers().chatHeaders
 
-    def _getRocketPassword(self):
-        return requests.post(f"{self.mainApi}/users/getRocketPassword", headers = self.headers, json = {}).json()["data"]["password"]
+    def __del__(self):
+        asyncio.get_event_loop().run_until_complete(self.clientSession.close())
 
-    def _chatAuth(self, login: str, rocketPassword: str):
+    async def _getRocketPassword(self):
+        response = await self.clientSession.post(f"{self.mainApi}/users/getRocketPassword", headers = self.headers, json = {})
+        body = await response.json()
+        return body["data"]["password"]
+
+    async def _chatAuth(self, login: str, rocketPassword: str):
         data = {
             "username": login,
             "password": rocketPassword
         }
-        response = requests.post(f"{self.chatApi}/login", headers = self.chatHeaders, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.chatApi}/login", headers = self.chatHeaders, json = data)
+        body = loads(await response.text())
         data = body["data"]
         me = data["me"]
         self.chatUserId = data["userId"]
@@ -29,15 +36,15 @@ class Client:
         self._chatApiId = me["_id"]
         self.chatHeaders["X-Auth-Token"] = self.chatAuthToken
         self.chatHeaders["X-User-Id"] = self._chatApiId
-        return response.status_code
+        return response.status
 
-    def auth(self, login: str, password: str):
+    async def auth(self, login: str, password: str):
         data = {
             "anonim": 0,
             "comment_id": 0,
             "count": 0,
             "device": None,
-            "device_id": "138268d66411a99fasd5fghj",
+            "device_id": helping.randomString(24),
             "filter": None,
             "gcm": None,
             "hidden": 0,
@@ -56,8 +63,8 @@ class Client:
             "type": 0,
             "user_id": None
         }
-        response = requests.post(f"{self.mainApi}/users/login2", headers = self.headers, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.mainApi}/users/login2", headers = self.headers, json = data)
+        body = loads(await response.text())
         if body["error"]:
             message = body["message"]
             raise exceptions.NotLoggedIn(message)
@@ -67,17 +74,17 @@ class Client:
         self.name = data["name"]
         self.login = data["login"]
         self.headers["Authorization"] = self.token
-        rocketPassword = self._getRocketPassword()
-        self._chatAuth(login, rocketPassword)
-        return response.status_code
+        rocketPassword = await self._getRocketPassword()
+        await self._chatAuth(login, rocketPassword)
+        return response.status
     
-    def register(self, nickname: str, login: str, password: str, setCredentials: bool = True):
+    async def register(self, nickname: str, login: str, password: str, setCredentials: bool = True):
         data = {
             "anonim": 0,
             "comment_id": 0,
             "count": 0,
             "device": None,
-            "device_id": "138268d66411a99f",
+            "device_id": helping.randomString(16),
             "filter": None,
             "gcm": None,
             "hidden": 0,
@@ -96,8 +103,8 @@ class Client:
             "type": 0,
             "user_id": None
         }
-        response = requests.post(f"{self.mainApi}/users/add", headers = self.headers, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.mainApi}/users/add", headers = self.headers, json = data)
+        body = loads(await response.text())
         if body["error"]:
             message = body["message"]
             raise exceptions.NotRegistered(message)
@@ -108,11 +115,11 @@ class Client:
             self.name = data["name"]
             self.login = data["login"]
             self.headers["Authorization"] = self.token
-            rocketPassword = self._getRocketPassword()
-            self._chatAuth(login, rocketPassword)
-        return response.status_code
+            rocketPassword = await self._getRocketPassword()
+            await self._chatAuth(login, rocketPassword)
+        return response.status
     
-    def getOnlineUsers(self, start: int = 0, size: int = 25):
+    async def getOnlineUsers(self, start: int = 0, size: int = 25):
         if not self.token:
             raise exceptions.Unauthorized()
         data = {
@@ -130,22 +137,22 @@ class Client:
             "size": size,
             "target": 0
         }
-        response = requests.post(f"{self.mainApi}/users/recent", headers = self.headers, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.mainApi}/users/recent", headers = self.headers, json = data)
+        body = loads(await response.text())
         if body["error"]:
             message = body["message"]
             raise exceptions.Unknown(message)
         data = body["data"]
         return objects.UserProfileList(data)
     
-    def startChat(self, targetLogin: str, message: str = None):
+    async def startChat(self, targetLogin: str, message: str = None):
         if not self.token:
             raise exceptions.Unauthorized()
         data = {
             "username": targetLogin
         }
-        response = requests.post(f"{self.chatApi}/im.create", headers = self.chatHeaders, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.chatApi}/im.create", headers = self.chatHeaders, json = data)
+        body = loads(await response.text())
         if not body["success"]:
             message = body["errorType"]
             raise exceptions.ChatNotCreated(message)
@@ -158,15 +165,15 @@ class Client:
                     "msg": message
                 }
             }
-            response = requests.post(f"{self.chatApi}/chat.sendMessage", headers = self.chatHeaders, json = data)
-            body = loads(response.text)
+            response = await self.clientSession.post(f"{self.chatApi}/chat.sendMessage", headers = self.chatHeaders, json = data)
+            body = loads(await response.text())
             if not body["success"]:
                 message = body["errorType"]
                 raise exceptions.MessageSendingError(message)
-            return response.status_code
+            return response.status
         return rid
 
-    def sendMessage(self, message: str, roomId: str):
+    async def sendMessage(self, message: str, roomId: str):
         if not self.token:
             raise exceptions.Unauthorized()
         data = {
@@ -176,14 +183,14 @@ class Client:
                 "msg": message
             }
         }
-        response = requests.post(f"{self.chatApi}/chat.sendMessage", headers = self.chatHeaders, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.chatApi}/chat.sendMessage", headers = self.chatHeaders, json = data)
+        body = loads(await response.text())
         if not body["success"]:
             message = body["errorType"]
             raise exceptions.MessageSendingError(message)
-        return response.status_code
-    
-    def like(self, postId: int):
+        return response.status
+
+    async def view(self, postId: int):
         if not self.token:
             raise exceptions.Unauthorized()
         data = {
@@ -210,14 +217,14 @@ class Client:
             "type": 0,
             "user_id": None
         }
-        response = requests.post(f"{self.mainApi}/posts/likeAdd", headers = self.headers, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.mainApi}/posts/viewAdd", headers = self.headers, json = data)
+        body = loads(await response.text())
         if body["error"]:
             message = body["message"]
-            raise exceptions.LikeError(message)
-        return response.status_code
-    
-    def unlike(self, postId: int):
+            raise exceptions.ViewError(message)
+        return response.status
+
+    async def like(self, postId: int, autoView: bool = True):
         if not self.token:
             raise exceptions.Unauthorized()
         data = {
@@ -244,14 +251,52 @@ class Client:
             "type": 0,
             "user_id": None
         }
-        response = requests.post(f"{self.mainApi}/posts/likeDelete", headers = self.headers, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.mainApi}/posts/likeAdd", headers = self.headers, json = data)
+        body = loads(await response.text())
         if body["error"]:
             message = body["message"]
             raise exceptions.LikeError(message)
-        return response.status_code
+        if autoView:
+            self.view(postId)
+        return response.status
     
-    def comment(self, postId: int, comment: str):
+    async def unlike(self, postId: int, autoView: bool = True):
+        if not self.token:
+            raise exceptions.Unauthorized()
+        data = {
+            "anonim": 0,
+            "comment_id": 0,
+            "count": 0,
+            "device": None,
+            "device_id": None,
+            "filter": None,
+            "gcm": None,
+            "hidden": 0,
+            "id": 0,
+            "last_message": 0,
+            "login": None,
+            "name": None,
+            "object_id": 0,
+            "offset": 0,
+            "owner_id": 0,
+            "password": None,
+            "post_id": postId,
+            "post_ids": None,
+            "search": None,
+            "text": None,
+            "type": 0,
+            "user_id": None
+        }
+        response = await self.clientSession.post(f"{self.mainApi}/posts/likeDelete", headers = self.headers, json = data)
+        body = loads(await response.text())
+        if body["error"]:
+            message = body["message"]
+            raise exceptions.LikeError(message)
+        if autoView:
+            self.view(postId)
+        return response.status
+    
+    async def comment(self, postId: int, comment: str, autoView: bool = True):
         if not self.token:
             raise exceptions.Unauthorized()
         if len(comment) < 3:
@@ -280,9 +325,123 @@ class Client:
             "type": 0,
             "user_id": None
         }
-        response = requests.post(f"{self.mainApi}/posts/commentAdd", headers = self.headers, json = data)
-        body = loads(response.text)
+        response = await self.clientSession.post(f"{self.mainApi}/posts/commentAdd", headers = self.headers, json = data)
+        body = loads(await response.text())
         if body["error"]:
             message = body["message"]
             raise exceptions.CommentingError(message)
-        return response.status_code
+        if autoView:
+            self.view(postId)
+        return response.status
+    
+
+    async def getRecentPosts(self, count: int = 50, userFilters: list = None):
+        if not userFilters:
+            filters = [
+                        122,
+                        93,
+                        76,
+                        78,
+                        75,
+                        74,
+                        95,
+                        113,
+                        96,
+                        81,
+                        103,
+                        65,
+                        66,
+                        89,
+                        82,
+                        72,
+                        79,
+                        86,
+                        80,
+                        71,
+                        68,
+                        83,
+                        98,
+                        84,
+                        85,
+                        124,
+                        91,
+                        88,
+                        99,
+                        101,
+                        109,
+                        110,
+                        111,
+                        117,
+                        118,
+                        108,
+                        125,
+                        126,
+                        112,
+                        115,
+                        120,
+                        121,
+                        128,
+                        129,
+                        131,
+                        132,
+                        133,
+                        134,
+                        135,
+                        136,
+                        69,
+                        70,
+                        73,
+                        77,
+                        67,
+                        107,
+                        106,
+                        114,
+                        137,
+                        138,
+                        139,
+                        140,
+                        141,
+                        142,
+                        143,
+                        130,
+                        127,
+                        123,
+                        119,
+                        116,
+                        97
+                    ]
+        else:
+            filters = userFilters
+        if not self.token:
+            raise exceptions.Unauthorized()
+        data = {
+            "anonim": 0,
+            "comment_id": 0,
+            "count": count,
+            "device": None,
+            "device_id": None,
+            "filter": filters,
+            "gcm": None,
+            "hidden": 0,
+            "id": 0,
+            "last_message": 0,
+            "login": None,
+            "name": None,
+            "object_id": 0,
+            "offset": 0,
+            "owner_id": 0,
+            "password": None,
+            "post_id": 0,
+            "post_ids": None,
+            "search": None,
+            "text": None,
+            "type": 1,
+            "user_id": None
+        }
+        response = await self.clientSession.post(f"{self.mainApi}/posts/get", headers = self.headers, json = data)
+        body = loads(await response.text())
+        if body["error"]:
+            message = body["message"]
+            raise exceptions.Unknown(message)
+        data = body["data"]
+        return objects.PostList(data)
