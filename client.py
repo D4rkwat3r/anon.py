@@ -257,7 +257,7 @@ class Client:
             message = body["message"]
             raise exceptions.LikeError(message)
         if autoView:
-            self.view(postId)
+            await self.view(postId)
         return response.status
     
     async def unlike(self, postId: int, autoView: bool = True):
@@ -293,9 +293,45 @@ class Client:
             message = body["message"]
             raise exceptions.LikeError(message)
         if autoView:
-            self.view(postId)
+            await self.view(postId)
         return response.status
     
+    async def repost(self, postId: int, autoView: bool = True):
+        if not self.token:
+            raise exceptions.Unauthorized()
+        data = {
+            "anonim": 0,
+            "comment_id": 0,
+            "count": 0,
+            "device": None,
+            "device_id": None,
+            "filter": None,
+            "gcm": None,
+            "hidden": 0,
+            "id": 0,
+            "last_message": 0,
+            "login": None,
+            "name": None,
+            "object_id": 0,
+            "offset": 0,
+            "owner_id": 0,
+            "password": None,
+            "post_id": postId,
+            "post_ids": None,
+            "search": None,
+            "text": None,
+            "type": 0,
+            "user_id": None
+        }
+        response = await self.clientSession.post(f"{self.mainApi}/posts/repost", headers = self.headers, json = data)
+        body = loads(await response.text())
+        if body["error"]:
+            message = body["message"]
+            raise exceptions.CommentingError(message)
+        if autoView:
+            await self.view(postId)
+        return response.status
+
     async def comment(self, postId: int, comment: str, autoView: bool = True):
         if not self.token:
             raise exceptions.Unauthorized()
@@ -331,11 +367,13 @@ class Client:
             message = body["message"]
             raise exceptions.CommentingError(message)
         if autoView:
-            self.view(postId)
+            await self.view(postId)
         return response.status
     
 
     async def getRecentPosts(self, count: int = 50, userFilters: list = None):
+        if not self.token:
+            raise exceptions.Unauthorized()
         if not userFilters:
             filters = [
                         122,
