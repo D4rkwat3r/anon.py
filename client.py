@@ -119,7 +119,7 @@ class Client:
             await self._chatAuth(login, rocketPassword)
         return response.status
     
-    async def getOnlineUsers(self, start: int = 0, size: int = 25):
+    async def getOnlineUsers(self, portion: int = 1):
         if not self.token:
             raise exceptions.Unauthorized()
         data = {
@@ -129,12 +129,12 @@ class Client:
             "city": None,
             "country": 0,
             "find": None,
-            "from": start,
+            "from": 0,
             "interests": None,
             "name": None,
-            "portion": 2,
+            "portion": portion,
             "sex": 0,
-            "size": size,
+            "size": 0,
             "target": 0
         }
         response = await self.clientSession.post(f"{self.mainApi}/users/recent", headers = self.headers, json = data)
